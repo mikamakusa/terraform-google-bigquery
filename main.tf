@@ -735,3 +735,65 @@ resource "google_bigquery_data_transfer_config" "this" {
     }
   }
 }
+
+## RESERVATION
+
+resource "google_bigquery_bi_reservation" "this" {
+  count    = length(var.bi_reservation)
+  project  = data.google_project.this.id
+  provider = google-beta
+  location = lookup(var.bi_reservation[count.index], "location")
+  size     = lookup(var.bi_reservation[count.index], "size")
+
+  dynamic "preferred_tables" {
+    for_each = lookup(var.bi_reservation[count.index], "preferred_tables") == null ? [] : ["preferred_tables"]
+    content {
+      project_id = try(element(google_bigquery_table.this.*.project, lookup(preferred_tables.value, "table_id")))
+      dataset_id = try(element(google_bigquery_table.this.*.dataset_id, lookup(preferred_tables.value, "table_id")))
+      table_id   = try(element(google_bigquery_table.this.*.table_id, lookup(preferred_tables.value, "table_id")))
+    }
+  }
+}
+
+resource "google_bigquery_capacity_commitment" "this" {
+  count                                = length(var.capacity_commitment)
+  provider                             = google-beta
+  project                              = data.google_project.this.id
+  plan                                 = lookup(var.capacity_commitment[count.index], "plan")
+  slot_count                           = lookup(var.capacity_commitment[count.index], "slot_count")
+  renewal_plan                         = lookup(var.capacity_commitment[count.index], "renewal_plan")
+  edition                              = lookup(var.capacity_commitment[count.index], "edition")
+  capacity_commitment_id               = lookup(var.capacity_commitment[count.index], "capacity_commitment_id")
+  location                             = lookup(var.capacity_commitment[count.index], "location")
+  enforce_single_admin_project_per_org = lookup(var.capacity_commitment[count.index], "enforce_single_admin_project_per_org")
+}
+
+resource "google_bigquery_reservation" "this" {
+  count                  = length(var.reservation)
+  project                = data.google_project.this.*.id
+  provider               = google-beta
+  name                   = lookup(var.reservation[count.index], "name")
+  slot_capacity          = lookup(var.reservation[count.index], "slot_capacity")
+  ignore_idle_slots      = lookup(var.reservation[count.index], "ignore_idle_slots")
+  concurrency            = lookup(var.reservation[count.index], "concurrency")
+  multi_region_auxiliary = lookup(var.reservation[count.index], "multi_region_auxiliary")
+  edition                = lookup(var.reservation[count.index], "edition")
+  location               = lookup(var.reservation[count.index], "location")
+
+  dynamic "autoscale" {
+    for_each = lookup(var.reservation[count.index], "max_slots") == null ? [] : ["autoscale"]
+    content {
+      max_slots = lookup(var.reservation[count.index], "max_slots")
+    }
+  }
+}
+
+resource "google_bigquery_reservation_assignment" "this" {
+  count       = length(var.reservation) == 0 ? 0 : length(var.reservation_assignment)
+  assignee    = lookup(var.reservation_assignment[count.index], "assignee")
+  job_type    = lookup(var.reservation_assignment[count.index], "job_type")
+  reservation = try(element(google_bigquery_reservation.this.*.id, lookup(var.reservation_assignment[count.index], "reservation_id")))
+  location    = lookup(var.reservation_assignment[count.index], "location")
+  project     = data.google_project.this.id
+  provider    = google-beta
+}

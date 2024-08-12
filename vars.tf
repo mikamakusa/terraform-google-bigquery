@@ -644,3 +644,55 @@ variable "data_transfer" {
   }))
   default = []
 }
+
+variable "bi_reservation" {
+  type = list(object({
+    id       = number
+    location = string
+    size     = optional(number)
+    preferred_tables = optional(list(object({
+      table_id = optional(any)
+    })))
+  }))
+  default = []
+}
+
+variable "capacity_commitment" {
+  type = list(object({
+    id                                   = number
+    plan                                 = string
+    slot_count                           = number
+    renewal_plan                         = optional(string)
+    edition                              = optional(string)
+    capacity_commitment_id               = optional(string)
+    location                             = optional(string)
+    enforce_single_admin_project_per_org = optional(string)
+  }))
+  default = []
+}
+
+variable "reservation" {
+  type = list(object({
+    id                     = number
+    name                   = string
+    slot_capacity          = number
+    ignore_idle_slots      = optional(bool)
+    concurrency            = optional(number)
+    multi_region_auxiliary = optional(bool)
+    edition                = optional(string)
+    location               = optional(string)
+    max_slots              = optional(string)
+  }))
+  default = []
+}
+
+variable "reservation_assignment" {
+  type = list(object({
+    id             = number
+    assignee       = string
+    job_type       = string
+    reservation_id = any
+    location       = optional(string)
+  }))
+  default = []
+}
