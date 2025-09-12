@@ -1,799 +1,345 @@
-## BIGQUERY ##
-
 resource "google_bigquery_dataset" "this" {
-  count                           = length(var.dataset)
-  project                         = data.google_project.this.id
-  provider                        = google-beta
-  dataset_id                      = lookup(var.dataset[count.index], "dataset_id")
-  default_collation               = lookup(var.dataset[count.index], "default_collation")
-  default_partition_expiration_ms = lookup(var.dataset[count.index], "default_partition_expiration_ms")
-  default_table_expiration_ms     = lookup(var.dataset[count.index], "default_table_expiration_ms")
-  delete_contents_on_destroy      = lookup(var.dataset[count.index], "delete_contents_on_destroy")
-  description                     = lookup(var.dataset[count.index], "description")
-  friendly_name                   = lookup(var.dataset[count.index], "friendly_name")
-  is_case_insensitive             = lookup(var.dataset[count.index], "is_case_insensitive")
-  labels                          = merge(var.labels, lookup(var.dataset[count.index], "labels"))
-  max_time_travel_hours           = lookup(var.dataset[count.index], "max_time_travel_hours")
-  storage_billing_model           = lookup(var.dataset[count.index], "storage_billing_model")
+  for_each                        = { for dataset in var.datasets : dataset.id => dataset }
+  dataset_id                      = each.value.id
+  max_time_travel_hours           = each.value.max_time_travel_hours
+  default_partition_expiration_ms = each.value.default_partition_expiration_ms
+  default_table_expiration_ms     = each.value.default_table_expiration_ms
+  description                     = each.value.description
+  friendly_name                   = each.value.friendly_name
+  labels                          = merge(var.labels, each.value.labels)
+  location                        = each.value.location
+  is_case_insensitive             = each.value.is_case_insensitive
+  default_collation               = each.value.default_collation
+  storage_billing_model           = each.value.storage_billing_model
+  resource_tags                   = each.value.resource_tags
+  project                         = data.google_project.this.project_id
+  delete_contents_on_destroy      = each.value.delete_contents_on_destroy
 
   dynamic "access" {
-    for_each = lookup(var.dataset[count.index], "access") == null ? [] : ["access"]
+    for_each = var.access != null ? [""] : []
     content {
-      domain         = lookup(access.value, "domain")
-      group_by_email = lookup(access.value, "group_by_email")
-      role           = lookup(access.value, "role")
-      special_group  = lookup(access.value, "special_group")
-      iam_member     = lookup(access.value, "iam_member")
-      user_by_email  = lookup(access.value, "user_by_email")
-
-      dynamic "dataset" {
-        for_each = lookup(access.value, "dataset") == null ? [] : ["dataset"]
-        content {
-          target_types = lookup(dataset.value, "target_types")
-
-          dynamic "dataset" {
-            for_each = lookup(access.value, "dataset") == null ? [] : ["datasset"]
-            content {
-              dataset_id = try(element(google_bigquery_dataset.this.*.dataset_id, lookup(dataset.value, "dataset_id")))
-              project_id = try(element(google_bigquery_dataset.this.*.project, lookup(dataset.value, "dataset_id")))
-            }
-          }
-        }
-      }
-
-      dynamic "routine" {
-        for_each = lookup(access.value, "routine") == null ? [] : ["routine"]
-        content {
-          project_id = try(element(google_bigquery_routine.this.*.project, lookup(routine.value, "routine_id")))
-          dataset_id = try(element(google_bigquery_routine.this.*.dataset_id, lookup(routine.value, "routine_id")))
-          routine_id = try(element(google_bigquery_routine.this.*.routine_id, lookup(routine.value, "routine_id")))
-        }
-      }
-
-      dynamic "view" {
-        for_each = lookup(access.value, "view") == null ? [] : ["view"]
-        content {
-          table_id   = try(element(google_bigquery_table.this.*.table_id, lookup(view.value, "table_id")))
-          dataset_id = try(element(google_bigquery_table.this.*.dataset_id, lookup(view.value, "table_id")))
-          project_id = try(element(google_bigquery_table.this.*.project, lookup(view.value, "table_id")))
-        }
-      }
-    }
-  }
-
-  dynamic "external_dataset_reference" {
-    for_each = lookup(var.dataset[count.index], "external_dataset_reference") == null ? [] : ["external_dataset_reference"]
-    iterator = external
-    content {
-      external_source = lookup(external.value, "external_source")
-      connection      = lookup(external.value, "connection")
+      domain         = var.access.domain
+      group_by_email = var.access.group_by_email
+      special_group  = var.access.special_group
+      user_by_email  = var.access.user_by_email
+      iam_member     = var.access.iam_member
     }
   }
 
   dynamic "default_encryption_configuration" {
-    for_each = lookup(var.dataset[count.index], "kms_key_id") == null ? [] : ["default_encryption_configuration"]
+    for_each = var.default_encryption_configuration != null ? [""] : []
     content {
-      kms_key_name = try(element(var.dataset_kms_key_name, lookup(var.dataset[count.index], "kms_key_id")))
+      kms_key_name = var.default_encryption_configuration.kms_key_name
+    }
+  }
+
+  dynamic "external_catalog_dataset_options" {
+    for_each = length(var.external_catalog_dataset_options) != null ? [""] : []
+    content {
+      parameters                   = var.external_catalog_dataset_options.parameters
+      default_storage_location_uri = var.external_catalog_dataset_options.default_storage_location_uri
+    }
+  }
+
+  dynamic "external_dataset_reference" {
+    for_each = var.external_dataset_reference != null ? [""] : []
+    iterator = edr
+    content {
+      connection      = var.external_dataset_reference.connection
+      external_source = var.external_dataset_reference.external_source
     }
   }
 }
 
 resource "google_bigquery_dataset_access" "this" {
-  count          = length(var.dataset) == 0 ? 0 : length(var.dataset_access)
-  project        = data.google_project.this.id
-  provider       = google-beta
-  dataset_id     = try(element(google_bigquery_dataset.this.*.id, lookup(var.dataset_access[count.index], "dataset_id")))
-  domain         = lookup(var.dataset_access[count.index], "domain")
-  group_by_email = lookup(var.dataset_access[count.index], "group_by_email")
-  iam_member     = lookup(var.dataset_access[count.index], "iam_member")
-  role           = lookup(var.dataset_access[count.index], "role")
-  special_group  = lookup(var.dataset_access[count.index], "special_group")
-  user_by_email  = lookup(var.dataset_access[count.index], "user_by_email")
-
-  dynamic "dataset" {
-    for_each = lookup(var.dataset_access[count.index], "dataset") == null ? [] : ["dataset"]
-    content {
-      target_types = lookup(dataset.value, "target_types")
-
-      dataset {
-        dataset_id = try(element(google_bigquery_dataset.this.*.dataset_id, lookup(dataset.value, "dataset_id")))
-        project_id = try(element(google_bigquery_dataset.this.*.project, lookup(dataset.value, "dataset_id")))
-      }
-    }
-  }
-
-  dynamic "view" {
-    for_each = lookup(var.dataset_access[count.index], "view") == null ? [] : ["view"]
-    content {
-      dataset_id = try(element(google_bigquery_dataset.this.*.dataset_id, lookup(view.value, "table_id")))
-      project_id = try(element(google_bigquery_table.this.*.project, lookup(view.value, "table_id")))
-      table_id   = try(element(google_bigquery_table.this.*.table_id, lookup(view.value, "table_id")))
-    }
-  }
+  for_each       = { for dataset in var.datasets : dataset.id => dataset if contains(keys(dataset, "dataset_accesses")) && dataset.dataset_accesses != null }
+  dataset_id     = google_bigquery_dataset.this[each.key].id
+  role           = lookup(each.value, "role")
+  user_by_email  = lookup(each.value, "user_by_email")
+  group_by_email = lookup(each.value, "group_by_email")
+  domain         = lookup(each.value, "domain")
+  special_group  = lookup(each.value, "special_group")
+  iam_member     = lookup(each.value, "iam_member")
+  project        = google_bigquery_dataset.this[each.key].project
 }
 
-resource "google_bigquery_dataset_iam_member" "this" {
-  count      = length(var.dataset) == 0 ? 0 : length(var.dataset_iam_member)
-  project    = data.google_project.this.id
-  dataset_id = try(element(google_bigquery_dataset.this.*.id, lookup(var.dataset_iam_member[count.index], "dataset_id")))
-  member     = lookup(var.dataset_iam_member[count.index], "member")
-  role       = lookup(var.dataset_iam_member[count.index], "role")
-
-  dynamic "condition" {
-    for_each = lookup(var.dataset_iam_member[count.index], "condition") == null ? [] : ["condition"]
-    content {
-      expression  = lookup(condition.value, "expression")
-      title       = lookup(condition.value, "title")
-      description = lookup(condition.value, "description")
-    }
-  }
+resource "google_bigquery_dataset_iam_policy" "this" {
+  for_each    = { for dataset in var.datasets : dataset.id => dataset if contains(keys(dataset, "policy_data")) && dataset.policy_data != null }
+  dataset_id  = google_bigquery_dataset.this[each.key].id
+  policy_data = each.value.policy_data
 }
 
 resource "google_bigquery_job" "this" {
-  count          = length(var.job)
-  project        = data.google_project.this.id
-  provider       = google-beta
-  job_id         = lookup(var.job[count.index], "job_id")
-  job_timeout_ms = lookup(var.job[count.index], "job_timeout_ms")
-  labels         = merge(var.labels, lookup(var.job[count.index], "labels"))
-  location       = lookup(var.job[count.index], "location")
+  for_each       = { for job in var.jobs : job.id => job }
+  job_id         = each.value.id
+  job_timeout_ms = each.value.job_timeout_ms
+  project        = each.value.project
+  labels         = data.google_project.this.project_id
+  location       = each.value.location
+
+  dynamic "query" {
+    for_each = var.query != null ? [""] : []
+    content {
+      query                 = var.query.query
+      create_disposition    = var.query.create_disposition
+      write_disposition     = var.query.write_disposition
+      allow_large_results   = var.query.allow_large_results
+      priority              = var.query.priority
+      maximum_bytes_billed  = var.query.maximum_bytes_billed
+      parameter_mode        = var.query.parameter_mode
+      schema_update_options = var.query.schema_update_options
+      use_legacy_sql        = var.query.use_legacy_sql
+      use_query_cache       = var.query.use_query_cache
+      flatten_results       = var.query.flatten_results
+      maximum_billing_tier  = var.query.maximum_billing_tier
+    }
+  }
+
+  dynamic "load" {
+    for_each = var.load != null ? [""] : []
+    content {
+      source_uris           = var.load.source_uris
+      allow_jagged_rows     = var.load.allow_jagged_rows
+      allow_quoted_newlines = var.load.allow_quoted_newlines
+      autodetect            = var.load.autodetect
+      create_disposition    = var.load.create_disposition
+      encoding              = var.load.encoding
+      field_delimiter       = var.load.field_delimiter
+      ignore_unknown_values = var.load.ignore_unknown_values
+      json_extension        = var.load.json_extension
+      max_bad_records       = var.load.max_bad_records
+      null_marker           = var.load.null_marker
+      projection_fields     = var.load.projection_fields
+      quote                 = var.load.quote
+      schema_update_options = var.load.schema_update_options
+      skip_leading_rows     = var.load.skip_leading_rows
+      source_format         = var.load.source_format
+      write_disposition     = var.load.write_disposition
+
+      destination_table {
+        table_id   = var.load.destination_table_id
+        project_id = var.load.destination_project_id
+        dataset_id = var.load.destination_dataset_id
+      }
+    }
+  }
 
   dynamic "copy" {
-    for_each = lookup(var.job[count.index], "copy") == null ? [] : ["copy"]
+    for_each = var.copy != null ? [""] : []
     content {
-      create_disposition = lookup(copy.value, "create_disposition")
-      write_disposition  = lookup(copy.value, "write_disposition")
+      create_disposition = var.copy.create_disposition
+      write_disposition  = var.copy.write_disposition
 
-      dynamic "source_tables" {
-        for_each = ""
-        content {
-          table_id   = ""
-          project_id = ""
-          dataset_id = ""
-        }
-      }
-
-      dynamic "destination_encryption_configuration" {
-        for_each = ""
-        content {
-          kms_key_name = ""
-        }
-      }
-
-      dynamic "destination_table" {
-        for_each = ""
-        content {
-          table_id   = ""
-          project_id = ""
-          dataset_id = ""
-        }
+      source_tables {
+        table_id   = var.copy.source_table_id
+        project_id = var.copy.source_project_id
+        dataset_id = var.copy.source_dataset_id
       }
     }
   }
 
   dynamic "extract" {
-    for_each = lookup(var.job[count.index], "extract") == null ? [] : ["extract"]
+    for_each = var.extract != null ? [""] : []
     content {
-      destination_uris   = []
-      print_header       = true
-      field_delimiter    = ""
-      destination_format = ""
-      compression        = ""
-
-      dynamic "source_model" {
-        for_each = ""
-        content {
-          dataset_id = ""
-          model_id   = ""
-          project_id = ""
-        }
-      }
-
-      dynamic "source_table" {
-        for_each = ""
-        content {
-          table_id   = ""
-          project_id = ""
-          dataset_id = ""
-        }
-      }
-    }
-  }
-
-  dynamic "load" {
-    for_each = lookup(var.job[count.index], "load") == null ? [] : ["load"]
-    content {
-      source_uris           = lookup(load.value, "source_uris")
-      allow_jagged_rows     = lookup(load.value, "allow_jagged_rows")
-      allow_quoted_newlines = lookup(load.value, "allow_quoted_newlines")
-      autodetect            = lookup(load.value, "autodetect")
-      create_disposition    = lookup(load.value, "create_disposition")
-      encoding              = lookup(load.value, "encoding")
-      field_delimiter       = lookup(load.value, "field_delimiter")
-      ignore_unknown_values = lookup(load.value, "ignore_unknown_values")
-      max_bad_records       = lookup(load.value, "max_bad_records")
-      null_marker           = lookup(load.value, "null_marker")
-      projection_fields     = lookup(load.value, "projection_fields")
-      quote                 = lookup(load.value, "quote")
-      schema_update_options = lookup(load.value, "schema_update_options")
-      skip_leading_rows     = lookup(load.value, "skip_leading_rows")
-      source_format         = lookup(load.value, "source_format")
-      write_disposition     = lookup(load.value, "write_disposition")
-
-      dynamic "destination_encryption_configuration" {
-        for_each = lookup(load.value, "kms_key_id") == null ? [] : ["destination_encryption_configuration"]
-        content {
-          kms_key_name = try(element(var.job_load_kms_key_name, lookup(load.value, "kms_key_id")))
-        }
-      }
-
-      dynamic "destination_table" {
-        for_each = lookup(load.value, "destination_table") == null ? [] : ["destination_table"]
-        content {
-          table_id   = try(element(google_bigquery_table.this.*.table_id, lookup(destination_table.value, "table_id")))
-          project_id = try(element(google_bigquery_table.this.*.project, lookup(destination_table.value, "table_id")))
-          dataset_id = try(element(google_bigquery_table.this.*.dataset_id, lookup(destination_table.value, "table_id")))
-        }
-      }
-
-      dynamic "time_partitioning" {
-        for_each = lookup(load.value, "time_partitioning") == null ? [] : ["time_partitioning"]
-        content {
-          type          = lookup(time_partitioning.value, "type")
-          expiration_ms = lookup(time_partitioning.value, "expiration_ms")
-          field         = lookup(time_partitioning.value, "field")
-        }
-      }
-
-      dynamic "parquet_options" {
-        for_each = lookup(load.value, "parquet_options") == null ? [] : ["parquet_options"]
-        content {
-          enum_as_string        = lookup(parquet_options.value, "enum_as_string")
-          enable_list_inference = lookup(parquet_options.value, "enable_list_inference")
-        }
-      }
-    }
-  }
-
-  dynamic "query" {
-    for_each = lookup(var.job[count.index], "query") == null ? [] : ["query"]
-    content {
-      query                 = lookup(query.value, "query")
-      create_disposition    = lookup(query.value, "create_disposition")
-      allow_large_results   = lookup(query.value, "allow_large_results")
-      flatten_results       = lookup(query.value, "flatten_results")
-      maximum_billing_tier  = lookup(query.value, "maximum_billing_tier")
-      maximum_bytes_billed  = lookup(query.value, "maximum_bytes_billed")
-      parameter_mode        = lookup(query.value, "parameter_mode")
-      priority              = lookup(query.value, "priority")
-      schema_update_options = lookup(query.value, "schema_update_options")
-      use_legacy_sql        = lookup(query.value, "use_legacy_sql")
-      use_query_cache       = lookup(query.value, "use_query_cache")
-      write_disposition     = lookup(query.value, "write_disposition")
-
-      dynamic "default_dataset" {
-        for_each = lookup(query.value, "default_dataset") == null ? [] : ["default_dataset"]
-        content {
-          dataset_id = try(element(google_bigquery_dataset.this.*.dataset_id, lookup(default_dataset.value, "dataset_id")))
-          project_id = try(element(google_bigquery_dataset.this.*.project, lookup(default_dataset.value, "dataset_id")))
-        }
-      }
-
-      dynamic "destination_encryption_configuration" {
-        for_each = lookup(query.value, "kms_key_id") == null ? [] : ["destination_encryption_configuration"]
-        content {
-          kms_key_name = try(element(var.job_query_kms_key_name, lookup(query.value, "kms_key_id")))
-        }
-      }
-
-      dynamic "destination_table" {
-        for_each = lookup(query.value, "destination_table") == null ? [] : ["destination_table"]
-        content {
-          table_id   = try(element(google_bigquery_table.this.*.table_id, lookup(destination_table.value, "table_id")))
-          dataset_id = try(element(google_bigquery_table.this.*.dataset_id, lookup(destination_table.value, "table_id")))
-          project_id = try(element(google_bigquery_table.this.*.project, lookup(destination_table.value, "table_id")))
-        }
-      }
-
-      dynamic "script_options" {
-        for_each = lookup(query.value, "script_options") == null ? [] : ["script_options"]
-        content {
-          statement_byte_budget = lookup(script_options.value, "statement_byte_budget")
-          statement_timeout_ms  = lookup(script_options.value, "statement_timeout_ms")
-          key_result_statement  = lookup(script_options.value, "key_result_statement")
-        }
-      }
-
-      dynamic "user_defined_function_resources" {
-        for_each = lookup(query.value, "user_defined_function_resources ") == null ? [] : ["user_defined_function_resources "]
-        content {
-          resource_uri = lookup(user_defined_function_resources.value, "resource_uri")
-          inline_code  = lookup(user_defined_function_resources.value, "inline_code")
-        }
-      }
+      destination_uris       = var.extract.destination_uris
+      print_header           = var.extract.print_header
+      field_delimiter        = var.extract.field_delimiter
+      destination_format     = var.extract.destination_format
+      use_avro_logical_types = var.extract.use_avro_logical_types
+      compression            = var.extract.compression
     }
   }
 }
 
 resource "google_bigquery_routine" "this" {
-  count                = length(var.dataset) == 0 ? 0 : length(var.routine)
-  dataset_id           = try(element(google_bigquery_dataset.this.*.dataset_id, lookup(var.routine[count.index], "dataset_id")))
-  definition_body      = lookup(var.routine[count.index], "definition_body")
-  routine_id           = lookup(var.routine[count.index], "routine_id")
-  routine_type         = lookup(var.routine[count.index], "routine_type")
-  language             = lookup(var.routine[count.index], "language")
-  return_type          = lookup(var.routine[count.index], "return_type")
-  return_table_type    = jsonencode(lookup(var.routine[count.index], "return_table_type"))
-  imported_libraries   = lookup(var.routine[count.index], "imported_libraries")
-  description          = lookup(var.routine[count.index], "description")
-  determinism_level    = lookup(var.routine[count.index], "determinism_level")
-  data_governance_type = "DATA_MASKING"
+  for_each             = { for dataset in var.datasets : dataset.id => dataset if contains(keys(dataset, "routines")) && dataset.routines != null }
+  dataset_id           = google_bigquery_dataset.this[each.key].id
+  definition_body      = lookup(each.value, "definition_body")
+  routine_id           = lookup(each.value, "routine_id")
+  routine_type         = lookup(each.value, "routine_type")
+  language             = lookup(each.value, "language")
+  return_type          = lookup(each.value, "return_type")
+  return_table_type    = lookup(each.value, "return_table_type")
+  data_governance_type = lookup(each.value, "data_governance_type")
+  description          = lookup(each.value, "description")
+  determinism_level    = lookup(each.value, "determinism_level")
+  security_mode        = lookup(each.value, "security_mode")
+  project              = google_bigquery_dataset.this[each.key].project
 
   dynamic "arguments" {
-    for_each = lookup(var.routine[count.index], "arguments") == null ? [] : ["arguments"]
+    for_each = var.arguments != null ? [""] : []
     content {
-      name          = lookup(arguments.value, "name")
-      argument_kind = lookup(arguments.value, "argument_kind")
-      mode          = lookup(arguments.value, "mode")
-      data_type     = jsonencode(lookup(arguments.value, "data_type"))
+      name          = var.arguments.name
+      argument_kind = var.arguments.argument_kind
+      data_type     = var.arguments.data_type
+      mode          = var.arguments.mode
     }
   }
 
   dynamic "remote_function_options" {
-    for_each = lookup(var.routine[count.index], "remote_function_options") == null ? [] : ["remote_function_options"]
+    for_each = var.remote_function_options != null ? [""] : []
     content {
-      endpoint             = lookup(remote_function_options.value, "endpoint")
-      connection           = lookup(remote_function_options.value, "connection")
-      user_defined_context = lookup(remote_function_options.value, "user_defined_context")
-      max_batching_rows    = lookup(remote_function_options.value, "max_batching_rows")
+      connection           = var.remote_function_options.connection
+      endpoint             = var.remote_function_options.endpoint
+      max_batching_rows    = var.remote_function_options.max_batching_rows
+      user_defined_context = var.remote_function_options.user_defined_context
     }
   }
 
   dynamic "spark_options" {
-    for_each = lookup(var.routine[count.index], "spark_options") == null ? [] : ["spark_options"]
+    for_each = var.spark_options != null ? [""] : []
     content {
-      connection      = lookup(spark_options.value, "connection")
-      container_image = lookup(spark_options.value, "container_image")
-      runtime_version = lookup(spark_options.value, "runtime_version")
-      properties      = lookup(spark_options.value, "properties")
-      main_file_uri   = lookup(spark_options.value, "main_file_uri")
-      main_class      = lookup(spark_options.value, "main_class")
-      py_file_uris    = lookup(spark_options.value, "py_file_uris")
-      jar_uris        = lookup(spark_options.value, "jar_uris")
-      file_uris       = lookup(spark_options.value, "file_uris")
-      archive_uris    = lookup(spark_options.value, "archive_uris")
+      archive_uris    = var.spark_options.archive_uris
+      connection      = var.spark_options.connection
+      container_image = var.spark_options.container_image
+      file_uris       = var.spark_options.file_uris
+      jar_uris        = var.spark_options.jar_uris
+      main_class      = var.spark_options.main_class
+      main_file_uri   = var.spark_options.main_file_uri
+      properties      = var.spark_options.properties
+      py_file_uris    = var.spark_options.py_file_uris
+      runtime_version = var.spark_options.runtime_version
     }
   }
 }
 
 resource "google_bigquery_table" "this" {
-  count                    = length(var.dataset) == 0 ? 0 : length(var.table)
-  dataset_id               = try(element(google_bigquery_dataset.this.*.dataset_id, lookup(var.table[count.index], "dataset_id")))
-  table_id                 = lookup(var.dataset[count.index], "table_id")
-  description              = lookup(var.dataset[count.index], "description")
-  deletion_protection      = lookup(var.dataset[count.index], "deletion_protection")
-  expiration_time          = lookup(var.dataset[count.index], "expiration_time")
-  friendly_name            = lookup(var.dataset[count.index], "friendly_name")
-  labels                   = merge(var.labels, lookup(var.table[count.index], "labels"))
-  max_staleness            = lookup(var.dataset[count.index], "max_staleness")
-  require_partition_filter = lookup(var.dataset[count.index], "require_partition_filter")
-  schema                   = lookup(var.dataset[count.index], "schema")
+  for_each                 = { for dataset in var.datasets : dataset.id => dataset if contains(keys(dataset, "tables")) && dataset.tables != null }
+  dataset_id               = google_bigquery_dataset.this[each.key].id
+  table_id                 = lookup(each.value, "id")
+  project                  = google_bigquery_dataset.this[each.key].project
+  deletion_protection      = lookup(each.value, "deletion_protection")
+  clustering               = lookup(each.value, "clustering")
+  description              = lookup(each.value, "description")
+  expiration_time          = lookup(each.value, "expiration_time")
+  friendly_name            = lookup(each.value, "friendly_name")
+  labels                   = lookup(each.value, "labels")
+  max_staleness            = lookup(each.value, "max_staleness")
+  require_partition_filter = lookup(each.value, "require_partition_filter")
+  resource_tags            = lookup(each.value, "resource_tags")
+  schema                   = lookup(each.value, "schema")
+  table_metadata_view      = lookup(each.value, "table_metadata_view")
+
+  dynamic "biglake_configuration" {
+    for_each = var.biglake_configuration != null ? [""] : []
+    content {
+      connection_id = var.biglake_configuration.connection_id
+      file_format   = var.biglake_configuration.file_format
+      storage_uri   = var.biglake_configuration.storage_uri
+      table_format  = var.biglake_configuration.table_format
+    }
+  }
 
   dynamic "encryption_configuration" {
-    for_each = lookup(var.table[count.index], "kms_key_id") == null ? [] : ["encryption_configuration"]
+    for_each = var.encryption_configuration != null ? [""] : []
     content {
-      kms_key_name = try(element(var.table_kms_key_name, lookup(var.table[count.index], "kms_key_id")))
+      kms_key_name = var.encryption_configuration.kms_key_name
+    }
+  }
+
+  dynamic "external_catalog_table_options" {
+    for_each = var.external_catalog_table_options != null ? [""] : []
+    content {
+      parameters    = var.external_catalog_table_options.parameters
+      connection_id = var.external_catalog_table_options.connection_id
     }
   }
 
   dynamic "external_data_configuration" {
-    for_each = lookup(var.table[count.index], "external_data_configuration") == null ? [] : ["external_data_configuration"]
-    iterator = external
+    for_each = var.external_data_configuration != null ? [""] : []
     content {
-      autodetect                = lookup(external.value, "autodetect")
-      source_uris               = lookup(external.value, "source_uris")
-      compression               = lookup(external.value, "compression")
-      connection_id             = lookup(external.value, "connection_id")
-      ignore_unknown_values     = lookup(external.value, "ignore_unknown_values")
-      max_bad_records           = lookup(external.value, "max_bad_records")
-      schema                    = lookup(external.value, "schema")
-      source_format             = lookup(external.value, "source_format")
-      file_set_spec_type        = lookup(external.value, "file_set_spec_type")
-      reference_file_schema_uri = lookup(external.value, "reference_file_schema_uri")
-      metadata_cache_mode       = lookup(external.value, "metadata_cache_mode")
-      object_metadata           = lookup(external.value, "object_metadata")
-
-      dynamic "avro_options" {
-        for_each = lookup(external.value, "use_avro_logical_types") == null ? [] : ["avro_options"]
-        content {
-          use_avro_logical_types = lookup(external.value, "use_avro_logical_types")
-        }
-      }
-
-      dynamic "bigtable_options" {
-        for_each = lookup(external.value, "bigtable_options") == null ? [] : ["bigtable_options"]
-        content {
-          ignore_unspecified_column_families = lookup(bigtable_options.value, "ignore_unspecified_column_families")
-          read_rowkey_as_string              = lookup(bigtable_options.value, "read_rowkey_as_string")
-          output_column_families_as_json     = lookup(bigtable_options.value, "output_column_families_as_json")
-
-          dynamic "column_family" {
-            for_each = lookup(bigtable_options.value, "column_family") == null ? [] : ["column_family"]
-            content {
-              family_id        = lookup(column_family.value, "family_id")
-              type             = lookup(column_family.value, "type")
-              encoding         = lookup(column_family.value, "encoding")
-              only_read_latest = lookup(column_family.value, "only_read_latest")
-
-              dynamic "column" {
-                for_each = lookup(column_family.value, "column") == null ? [] : ["column"]
-                content {
-                  qualifier_encoded = lookup(column.value, "qualifier_encoded")
-                  qualifier_string  = lookup(column.value, "qualifier_string")
-                  type              = lookup(column.value, "type")
-                  encoding          = lookup(column.value, "encoding")
-                  only_read_latest  = lookup(column.value, "only_read_latest")
-                }
-              }
-            }
-          }
-        }
-      }
-
-      dynamic "csv_options" {
-        for_each = lookup(external.value, "csv_options") == null ? [] : ["csv_options"]
-        content {
-          quote                 = lookup(csv_options.value, "quote")
-          allow_jagged_rows     = lookup(csv_options.value, "allow_jagged_rows")
-          allow_quoted_newlines = lookup(csv_options.value, "allow_quoted_newlines")
-          skip_leading_rows     = lookup(csv_options.value, "skip_leading_rows")
-          encoding              = lookup(csv_options.value, "encoding")
-          field_delimiter       = lookup(csv_options.value, "field_delimiter")
-        }
-      }
-
-      dynamic "google_sheets_options" {
-        for_each = lookup(external.value, "google_sheets_options") == null ? [] : ["google_sheets_options"]
-        iterator = google
-        content {
-          range             = lookup(google.value, "range")
-          skip_leading_rows = lookup(google.value, "skip_leading_rows")
-        }
-      }
-
-      dynamic "hive_partitioning_options" {
-        for_each = lookup(external.value, "hive_partitioning_options") == null ? [] : ["hive_partitioning_options"]
-        iterator = hive
-        content {
-          mode                     = lookup(hive.value, "mode")
-          require_partition_filter = lookup(hive.value, "require_partition_filter")
-          source_uri_prefix        = lookup(hive.value, "source_uri_prefix")
-        }
-      }
-
-      dynamic "json_options" {
-        for_each = lookup(external.value, "json_options_encoding") == null ? [] : ["json_options"]
-        content {
-          encoding = lookup(json_options.value, "json_options_encoding")
-        }
-      }
-
-      dynamic "parquet_options" {
-        for_each = (lookup(external.value, "enum_as_string") || lookup(external.value, "enable_list_inference")) == null ? [] : ["parquet_options"]
-        content {
-          enum_as_string        = lookup(external.value, "enum_as_string")
-          enable_list_inference = lookup(external.value, "enable_list_inference")
-        }
-      }
+      autodetect                = var.external_data_configuration.autodetect
+      source_uris               = var.external_data_configuration.source_uris
+      compression               = var.external_data_configuration.compression
+      connection_id             = var.external_data_configuration.connection_id
+      file_set_spec_type        = var.external_data_configuration.file_set_spec_type
+      ignore_unknown_values     = var.external_data_configuration.ignore_unknown_values
+      json_extension            = var.external_data_configuration.json_extension
+      max_bad_records           = var.external_data_configuration.max_bad_records
+      metadata_cache_mode       = var.external_data_configuration.metadata_cache_mode
+      object_metadata           = var.external_data_configuration.object_metadata
+      reference_file_schema_uri = var.external_data_configuration.reference_file_schema_uri
+      schema                    = var.external_data_configuration.schema
+      source_format             = var.external_data_configuration.source_format
     }
   }
 
   dynamic "materialized_view" {
-    for_each = lookup(var.table[count.index], "materialized_view") == null ? [] : ["materialized_view"]
+    for_each = var.materialized_view != null ? [""] : []
     content {
-      query                            = lookup(materialized_view.value, "query")
-      enable_refresh                   = lookup(materialized_view.value, "enable_refresh")
-      refresh_interval_ms              = lookup(materialized_view.value, "refresh_interval_ms")
-      allow_non_incremental_definition = lookup(materialized_view.value, "allow_non_incremental_definition")
+      query                            = var.materialized_view.query
+      allow_non_incremental_definition = var.materialized_view.allow_non_incremental_definition
+      enable_refresh                   = var.materialized_view.enable_refresh
+      refresh_interval_ms              = var.materialized_view.refresh_interval_ms
     }
   }
 
   dynamic "range_partitioning" {
-    for_each = lookup(var.table[count.index], "range_partitioning_field") == null ? [] : ["range_partitioning"]
+    for_each = var.range_partitioning != null ? [""] : []
     content {
-      field = lookup(var.table[count.index], "range_partitioning_field")
+      field = var.range_partitioning.field
 
       range {
-        interval = lookup(var.table, "interval")
-        end      = lookup(var.table, "end")
-        start    = lookup(var.table, "start")
+        end      = var.range_partitioning.range_end
+        interval = var.range_partitioning.range_interval
+        start    = var.range_partitioning.range_start
       }
     }
   }
 
-  dynamic "table_constraints" {
-    for_each = lookup(var.table[count.index], "table_constraints") == null ? [] : ["table_constraints"]
+  dynamic "schema_foreign_type_info" {
+    for_each = var.schema_foreign_type_info != null ? [""] : []
     content {
-      dynamic "primary_key" {
-        for_each = lookup(table_constraints.value, "primary_key_columns") == null ? [] : ["primary_key"]
-        content {
-          columns = lookup(table_constraints.value, "primary_key_columns")
+      type_system = var.schema_foreign_type_info.type_system
+    }
+  }
+
+  /*  dynamic "table_constraints" {
+    for_each = lookup(var.table_constraints) != null ? [""] : []
+    iterator = tbl_const
+    content {
+      primary_key {
+        columns = []
+      }
+      foreign_keys {
+        name = ""
+        column_references {
+          referenced_column  = ""
+          referencing_column = ""
+        }
+        referenced_table {
+          dataset_id = ""
+          project_id = ""
+          table_id   = ""
         }
       }
+    }
+  }*/
 
-      dynamic "foreign_keys" {
-        for_each = lookup(table_constraints.value, "foreign_keys") == null ? [] : ["foreign_keys"]
-        content {
-          name = lookup(foreign_keys.value, "name")
-
-          dynamic "column_references" {
-            for_each = lookup(foreign_keys.value, "column_references")
-            content {
-              referenced_column  = lookup(column_references.value, "referenced_column")
-              referencing_column = lookup(column_references.value, "referencing_column")
-            }
-          }
-
-          dynamic "referenced_table" {
-            for_each = lookup(foreign_keys.value, "referenced_table")
-            content {
-              table_id   = try(element(google_bigquery_table.this.*.table_id, lookup(referenced_table.value, "table_id")))
-              dataset_id = try(element(google_bigquery_table.this.*.dataset_id, lookup(referenced_table.value, "table_id")))
-              project_id = try(element(google_bigquery_table.this.*.project, lookup(referenced_table.value, "table_id")))
-            }
-          }
-        }
-      }
+  dynamic "table_replication_info" {
+    for_each = var.table_replication_info != null ? [""] : []
+    content {
+      source_dataset_id       = var.table_replication_info.source_dataset_id
+      source_project_id       = var.table_replication_info.source_project_id
+      source_table_id         = var.table_replication_info.source_table_id
+      replication_interval_ms = var.table_replication_info.replication_interval_ms
     }
   }
 
   dynamic "time_partitioning" {
-    for_each = lookup(var.table[count.index], "time_partitioning") == null ? [] : ["time_partitioning"]
+    for_each = var.time_partitioning != null ? [""] : []
     content {
-      type          = lookup(time_partitioning.value, "type")
-      expiration_ms = lookup(time_partitioning.value, "expiration_ms")
-      field         = lookup(time_partitioning.value, "field")
+      type          = var.time_partitioning.type
+      field         = var.time_partitioning.field
+      expiration_ms = var.time_partitioning.expiration_ms
     }
   }
 
   dynamic "view" {
-    for_each = (lookup(var.table[count.index], "view_query") || lookup(var.table[count.index], "view_use_legacy_sql")) == null ? [] : ["view"]
+    for_each = var.view != null ? [""] : []
     content {
-      query          = lookup(var.table, "view_query")
-      use_legacy_sql = lookup(var.table, "view_use_legacy_sql")
+      query          = var.view.query
+      use_legacy_sql = var.view.use_legacy_sql
     }
   }
-
-  dynamic "table_replication_info" {
-    for_each = lookup(var.table[count.index], "table_replication_info") == null ? [] : ["table_replication_info"]
-    content {
-      source_project_id       = lookup(table_replication_info.value, "source_project_id")
-      source_dataset_id       = lookup(table_replication_info.value, "source_dataset_id")
-      source_table_id         = lookup(table_replication_info.value, "source_table_id")
-      replication_interval_ms = lookup(table_replication_info.value, "replication_interval_ms")
-    }
-  }
-}
-
-resource "google_bigquery_table_iam_member" "this" {
-  count      = (length(var.dataset) && length(var.table)) == 0 ? 0 : length(var.table_iam_member)
-  dataset_id = try(element(google_bigquery_dataset.this.*.dataset_id, lookup(var.table_iam_member[count.index], "dataset_id")))
-  member     = lookup(var.table_iam_member[count.index], "member")
-  role       = lookup(var.table_iam_member[count.index], "role")
-  table_id   = try(element(google_bigquery_table.this.*.table_id, lookup(var.table_iam_member[count.index], "table_id")))
-
-  dynamic "condition" {
-    for_each = lookup(var.table_iam_member[count.index], "condition")
-    content {
-      expression  = lookup(condition.value, "expression")
-      title       = lookup(condition.value, "title")
-      description = lookup(condition.value, "description")
-    }
-  }
-}
-
-## CONNECTION ##
-
-resource "google_bigquery_connection" "this" {
-  count         = length(var.connection)
-  project       = data.google_project.this.id
-  provider      = google-beta
-  connection_id = lookup(var.connection[count.index], "connection_id")
-  location      = lookup(var.connection[count.index], "location")
-  friendly_name = lookup(var.connection[count.index], "friendly_name")
-  description   = lookup(var.connection[count.index], "description")
-  kms_key_name  = try(element(var.connection_kms_key_name, lookup(var.connection[count.index], "kms_key_id")))
-
-  dynamic "cloud_resource" {
-    for_each = lookup(var.connection[count.index], "cloud_resource") != true ? [] : ["cloud_resource"]
-    content {
-
-    }
-  }
-
-  dynamic "aws" {
-    for_each = lookup(var.connection[count.index], "iam_role_id") == null ? [] : ["aws"]
-    content {
-      access_role {
-        iam_role_id = lookup(var.connection[count.index], "iam_role_id")
-      }
-    }
-  }
-
-  dynamic "azure" {
-    for_each = lookup(var.connection[count.index], "azure") == null ? [] : ["azure"]
-    content {
-      customer_tenant_id              = sensitive(lookup(azure.value, "customer_tenant_id"))
-      federated_application_client_id = sensitive(lookup(azure.value, "federated_application_client_id"))
-
-    }
-  }
-
-  dynamic "cloud_spanner" {
-    for_each = lookup(var.connection[count.index], "cloud_spanner") == null ? [] : ["cloud_spanner"]
-    content {
-      database        = lookup(cloud_spanner.value, "database")
-      database_role   = lookup(cloud_spanner.value, "database_role")
-      use_parallelism = lookup(cloud_spanner.value, "use_parallelism")
-      use_data_boost  = lookup(cloud_spanner.value, "use_data_boost")
-      max_parallelism = lookup(cloud_spanner.value, "max_parallelism")
-    }
-  }
-
-  dynamic "cloud_sql" {
-    for_each = lookup(var.connection[count.index], "cloud_sql") == null ? [] : ["cloud_sql"]
-    content {
-      database    = try(element(var.sql_database_name, lookup(cloud_sql.value, "database_id")))
-      instance_id = try(element(var.sql_database_instance_name, lookup(cloud_sql.value, "instance_id")))
-      type        = lookup(cloud_sql.value, "type")
-
-      credential {
-        username = try(element(var.sql_database_user, lookup(cloud_sql.value, "username")))
-        password = try(element(var.sql_database_password, lookup(cloud_sql.value, "password")))
-      }
-    }
-  }
-
-  dynamic "spark" {
-    for_each = lookup(var.connection[count.index], "spark") == null ? [] : ["spark"]
-    content {
-      spark_history_server_config {
-        dataproc_cluster = lookup(spark.value, "dataproc_cluster")
-      }
-
-      metastore_service_config {
-        metastore_service = lookup(spark.value, "metastore_service")
-      }
-    }
-  }
-}
-
-resource "google_bigquery_connection_iam_member" "this" {
-  count         = length(var.connection) == 0 ? 0 : length(var.connection_iam_member)
-  connection_id = try(element(google_bigquery_connection.this.*.connection_id, ))
-  member        = lookup(var.connection_iam_member[count.index], "member")
-  role          = lookup(var.connection_iam_member[count.index], "role")
-}
-
-## DATA_POLICY ##
-
-resource "google_bigquery_datapolicy_data_policy" "this" {
-  count            = length(var.datapolicy_data_policy)
-  project          = data.google_project.this.id
-  provider         = google-beta
-  data_policy_id   = lookup(var.datapolicy_data_policy[count.index], "data_policy_id")
-  data_policy_type = lookup(var.datapolicy_data_policy[count.index], "data_policy_type")
-  location         = lookup(var.datapolicy_data_policy[count.index], "location")
-  policy_tag       = lookup(var.datapolicy_data_policy[count.index], "policy_tag")
-
-  dynamic "data_masking_policy" {
-    for_each = lookup(var.datapolicy_data_policy[count.index], "data_masking_policy") == null ? [] : ["data_masking_policy"]
-    iterator = dmp
-    content {
-      predefined_expression = lookup(dmp.value, "predefined_expression")
-      routine               = try(google_bigquery_routine.this.*.id, lookup(dmp.value, "routine_id"))
-    }
-  }
-}
-
-## DATA_TRANSFER ##
-
-resource "google_bigquery_data_transfer_config" "this" {
-  count                     = length(var.dataset) == 0 ? 0 : length(var.data_transfer)
-  project                   = data.google_project.this.id
-  provider                  = google-beta
-  data_source_id            = lookup(var.data_transfer[count.index], "data_source_id")
-  display_name              = lookup(var.data_transfer[count.index], "display_name")
-  params                    = lookup(var.data_transfer[count.index], "params")
-  destination_dataset_id    = try(element(google_bigquery_dataset.this.*.id, lookup(var.data_transfer[count.index], "destination_dataset_id")))
-  schedule                  = lookup(var.data_transfer[count.index], "schedule")
-  notification_pubsub_topic = lookup(var.data_transfer[count.index], "notification_pubsub_topic")
-  data_refresh_window_days  = lookup(var.data_transfer[count.index], "data_refresh_window_days")
-  disabled                  = lookup(var.data_transfer[count.index], "disabled")
-  service_account_name      = lookup(var.data_transfer[count.index], "service_account_name")
-
-  dynamic "schedule_options" {
-    for_each = lookup(var.data_transfer[count.index], "schedule_options") == null ? [] : ["schedule_options"]
-    content {
-      disable_auto_scheduling = lookup(schedule_options.value, "disable_auto_scheduling")
-      start_time              = lookup(schedule_options.value, "start_time")
-      end_time                = lookup(schedule_options.value, "end_time")
-    }
-  }
-
-  dynamic "email_preferences" {
-    for_each = lookup(var.data_transfer[count.index], "enable_failure_email") == null ? [] : ["email_preferences"]
-    content {
-      enable_failure_email = lookup(var.data_transfer[count.index], "enable_failure_email")
-    }
-  }
-
-  dynamic "sensitive_params" {
-    for_each = lookup(var.data_transfer[count.index], "secret_access_key") == null ? [] : ["sensitive_params"]
-    content {
-      secret_access_key = lookup(var.data_transfer[count.index], "secret_access_key")
-    }
-  }
-}
-
-## RESERVATION
-
-resource "google_bigquery_bi_reservation" "this" {
-  count    = length(var.bi_reservation)
-  project  = data.google_project.this.id
-  provider = google-beta
-  location = lookup(var.bi_reservation[count.index], "location")
-  size     = lookup(var.bi_reservation[count.index], "size")
-
-  dynamic "preferred_tables" {
-    for_each = lookup(var.bi_reservation[count.index], "preferred_tables") == null ? [] : ["preferred_tables"]
-    content {
-      project_id = try(element(google_bigquery_table.this.*.project, lookup(preferred_tables.value, "table_id")))
-      dataset_id = try(element(google_bigquery_table.this.*.dataset_id, lookup(preferred_tables.value, "table_id")))
-      table_id   = try(element(google_bigquery_table.this.*.table_id, lookup(preferred_tables.value, "table_id")))
-    }
-  }
-}
-
-resource "google_bigquery_capacity_commitment" "this" {
-  count                                = length(var.capacity_commitment)
-  provider                             = google-beta
-  project                              = data.google_project.this.id
-  plan                                 = lookup(var.capacity_commitment[count.index], "plan")
-  slot_count                           = lookup(var.capacity_commitment[count.index], "slot_count")
-  renewal_plan                         = lookup(var.capacity_commitment[count.index], "renewal_plan")
-  edition                              = lookup(var.capacity_commitment[count.index], "edition")
-  capacity_commitment_id               = lookup(var.capacity_commitment[count.index], "capacity_commitment_id")
-  location                             = lookup(var.capacity_commitment[count.index], "location")
-  enforce_single_admin_project_per_org = lookup(var.capacity_commitment[count.index], "enforce_single_admin_project_per_org")
-}
-
-resource "google_bigquery_reservation" "this" {
-  count                  = length(var.reservation)
-  project                = data.google_project.this.*.id
-  provider               = google-beta
-  name                   = lookup(var.reservation[count.index], "name")
-  slot_capacity          = lookup(var.reservation[count.index], "slot_capacity")
-  ignore_idle_slots      = lookup(var.reservation[count.index], "ignore_idle_slots")
-  concurrency            = lookup(var.reservation[count.index], "concurrency")
-  multi_region_auxiliary = lookup(var.reservation[count.index], "multi_region_auxiliary")
-  edition                = lookup(var.reservation[count.index], "edition")
-  location               = lookup(var.reservation[count.index], "location")
-
-  dynamic "autoscale" {
-    for_each = lookup(var.reservation[count.index], "max_slots") == null ? [] : ["autoscale"]
-    content {
-      max_slots = lookup(var.reservation[count.index], "max_slots")
-    }
-  }
-}
-
-resource "google_bigquery_reservation_assignment" "this" {
-  count       = length(var.reservation) == 0 ? 0 : length(var.reservation_assignment)
-  assignee    = lookup(var.reservation_assignment[count.index], "assignee")
-  job_type    = lookup(var.reservation_assignment[count.index], "job_type")
-  reservation = try(element(google_bigquery_reservation.this.*.id, lookup(var.reservation_assignment[count.index], "reservation_id")))
-  location    = lookup(var.reservation_assignment[count.index], "location")
-  project     = data.google_project.this.id
-  provider    = google-beta
 }

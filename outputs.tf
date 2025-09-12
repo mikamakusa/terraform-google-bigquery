@@ -1,105 +1,69 @@
-## DATASET ##
-
-output "dataset_id" {
-  value = try(
-    google_bigquery_dataset.this.*.dataset_id
-  )
+output "datasets" {
+  value = {
+    for a in google_bigquery_dataset.this : a => {
+      id                 = a.id
+      creation_time      = a.creation_time
+      etag               = a.etag
+      last_modified_time = a.last_modified_time
+      terraform_labels   = a.terraform_labels
+      effective_labels   = a.effective_labels
+      self_link          = a.self_link
+    }
+  }
 }
 
-output "dataset_labels" {
-  value = try(
-    google_bigquery_dataset.this.*.labels
-  )
+output "dataset_accesses" {
+  value = {
+    for a in google_bigquery_dataset_access.this : a => {
+      id = a.id
+    }
+  }
 }
 
-output "dataset_project" {
-  value = try(
-    google_bigquery_dataset.this.*.project
-  )
+output "dataset_iam_policies" {
+  value = {
+    for a in google_bigquery_dataset_iam_policy.this : a => {
+      id   = a.id
+      etag = a.etag
+    }
+  }
 }
 
-## DATASET_ACCESS ##
-
-output "dataset_access_dataset_id" {
-  value = try(
-    google_bigquery_dataset_access.this.*.dataset_id
-  )
+output "jobs" {
+  value = {
+    for a in google_bigquery_job.this : a => {
+      id               = a.id
+      user_email       = a.user_email
+      job_type         = a.job_type
+      terraform_labels = a.terraform_labels
+      effective_labels = a.effective_labels
+    }
+  }
 }
 
-## JOB ##
-
-output "job_id" {
-  value = try(
-    google_bigquery_job.this.*.job_id
-  )
+output "routines" {
+  value = {
+    for a in google_bigquery_routine.this : a => {
+      id                 = a.id
+      creation_time      = a.creation_time
+      last_modified_time = a.last_modified_time
+    }
+  }
 }
 
-output "job_status" {
-  value = try(
-    google_bigquery_job.this.*.status
-  )
-}
-
-## ROUTINE ##
-
-output "routine_id" {
-  value = try(
-    google_bigquery_routine.this.*.routine_id
-  )
-}
-
-output "routine_dataset_id" {
-  value = try(
-    google_bigquery_routine.this.*.dataset_id
-  )
-}
-
-output "routine_project" {
-  value = try(
-    google_bigquery_routine.this.*.project
-  )
-}
-
-## TABLE ##
-
-output "table_project" {
-  value = try(
-    google_bigquery_table.this.*.project
-  )
-}
-
-output "table_dataset_id" {
-  value = try(
-    google_bigquery_table.this.*.dataset_id
-  )
-}
-
-output "table_id" {
-  value = try(
-    google_bigquery_table.this.*.table_id
-  )
-}
-
-## CONNECTION ##
-
-output "connection_id" {
-  value = try(
-    google_bigquery_connection.this.*.connection_id
-  )
-}
-
-## DATA_POLICY ##
-
-output "data_policy_id" {
-  value = try(
-    google_bigquery_datapolicy_data_policy.this.*.data_policy_id
-  )
-}
-
-## DATA TRANSFER ##
-
-output "data_transfer_id" {
-  value = try(
-    google_bigquery_data_transfer_config.this.*.id
-  )
+output "tables" {
+  value = {
+    for a in google_bigquery_table.this : a => {
+      id                  = a.id
+      creation_time       = a.creation_time
+      etag                = a.etag
+      last_modified_time  = a.last_modified_time
+      location            = a.location
+      num_bytes           = a.num_bytes
+      num_long_term_bytes = a.num_long_term_bytes
+      num_rows            = a.num_rows
+      self_link           = a.self_link
+      type                = a.type
+    }
+  }
 }
